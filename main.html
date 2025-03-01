@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Isekai'd: Browse Anime</title>
+    <link rel="stylesheet" href="main.css">
+    <link rel="icon" href="images/image.png">
+</head>
+<body>
+    <script>
+        // Youtube API Key from Google Cloud Console
+        const YOUTUBE_API_KEY = "AIzaSyBQ0mfJFlavnndkUyz2bVVqbaGtm2LlLe4";
+    
+        function searchAnime() {
+            const query = document.getElementById("searchInput").value;
+            const genre = document.getElementById("genre").value;
+            const resultDiv = document.getElementById("result");
+            const youtubeDiv = document.getElementById("youtube-results");
+            const aniListDiv = document.getElementById("anilist-results");
+
+            if (!query) {
+                resultDiv.innerHTML = "Please enter an anime name.";
+                youtubeDiv.innerHTML = "";
+                aniListDiv.innerHTML = "";
+                return;
+            }
+
+            resultDiv.innerHTML = "";
+            youtubeDiv.innerHTML = "";
+            aniListDiv.innerHTML = "";
+
+            let apiUrl = `https://api.jikan.moe/v4/anime?q=${query}`;
+            if (genre) apiUrl += `&genres=${genre}`;
+
+            // Fetch anime from Jikan API
+            fetch(apiUrl)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.data && data.data.length > 0) {
+                        const animeResults = data.data.slice(0, 4); // This line will get the first 4 results
+
+                        animeResults.forEach((anime, index) => {
+                            const animeElement = document.createElement("div");
+                            animeElement.classList.add("anime-result");
+
+                            animeElement.innerHTML = `
+                                <img src="${anime.images.jpg.image_url}" alt="${anime.title}">
+                                <div>
+                                    <h3>${anime.title}</h3>
+                                    <p>${anime.synopsis ? anime.synopsis.substring(0, 100) + "..." : "No synopsis available."}</p>
+                                </div>
+                            `;
+                            resultDiv.appendChild(animeElement);
+
+                            // Fetch anime info from Anilist API
+                            fetchAniListInfo(anime.title);
+
+                            // Shows only the first trailer of the aniime 
+                            if (index === 0) {
+                                fetchYouTubeTrailer(anime.title);
+                            }
+                        });
+                    } else {
+                        resultDiv.innerHTML = "<p>No results found.</p>";
+                    }
+                })
+                .catch(error => {
+                    console.error("Error fetching anime:", error);
+                    resultDiv.innerHTML = "<p>Error fetching anime data.</p>";
+                });
+        }
+
+        function fetchYouTubeTrailer(animeTitle) {
+            const youtubeDiv = document.getElementById("youtube-results");
+            youtubeDiv.innerHTML = "";
+
+            // Search query for the trailer "official anime trailer [search input]"
+            const youtubeUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${animeTitle} official anime trailer&key=${YOUTUBE_API_KEY}&type=video&maxResults=1`;
+
+            fetch(youtubeUrl)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.items && data.items.length > 0) {
+                        const videoId = data.items[0].id.videoId;
+
+                        const trailerElement = document.createElement("div");
+                        trailerElement.classList.add("anime-result");
+
+                        trailerElement.innerHTML = `
+                            <iframe width="300" height="170" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen></iframe>
+                        `;
+                        youtubeDiv.appendChild(trailerElement);
+                    } else {
+                        youtubeDiv.innerHTML = `<p>No trailer found for ${animeTitle}.</p>`;
+                    }
+                })
+                .catch(error => {
+                    console.error("Error fetching YouTube trailer:", error);
+                    youtubeDiv.innerHTML = `<p>Error fetching trailer for ${animeTitle}.</p>`;
+                });
+        }
+
+
+
+        function fetchAniListInfo(animeTitle) {
+            const aniListDiv = document.getElementById("anilist-results");
+
+            const aniListQuery = `
+                query ($search: String) {
+                    Media(search: $search, type: ANIME) {
+                        title {
+                            romaji
+                            english
+                        }
+                        description
+                        averageScore
+                        genres
+                        coverImage {
+                            large
+                        }
+                    }
+                }
+            `;
+
+            fetch("https://graphql.anilist.co", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    query: aniListQuery,
+                    variables: { search: animeTitle },
+                }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.data && data.data.Media) {
+                    const anime = data.data.Media;
+
+                    const aniListElement = document.createElement("div");
+                    aniListElement.classList.add("anime-result");
+
+                    aniListElement.innerHTML = `
+                        <img src="${anime.coverImage.large}" alt="${anime.title.romaji}">
+                        <div>
+                            <h3>${anime.title.english || anime.title.romaji}</h3>
+                            <p>⭐ Score: ${anime.averageScore}/100</p>
+                            <p><strong>Genres:</strong> ${anime.genres.join(", ")}</p>
+                            <p>${anime.description ? anime.description.substring(0, 150) + "..." : "No description available."}</p>
+                        </div>
+                    `;
+
+                    aniListDiv.appendChild(aniListElement);
+                } else {
+                    aniListDiv.innerHTML += "<p>No additional info found.</p>";
+                }
+            })
+            .catch(error => console.error("Error fetching AniList data:", error));
+        }
+    </script>
+    
+    <!-- Top bar -->
+    <div class="hero">
+        <h1>Isekai'd: A Search Engine for Anime</h1>
+        <p>Isekai'd is a website where you can browse and search for anime recommendations.</p>
+    </div>
+
+    <!-- Genre Selection -->
+    <div class="genre-filter">
+        <label for="genre">Select Genre:</label>
+        <select id="genre" name="genre">
+            <option value="">--Select Genre--</option>
+            <option value="1">Action</option>
+            <option value="2">Adventure</option>
+            <option value="4">Comedy</option>
+            <option value="8">Drama</option>
+            <option value="10">Fantasy</option>
+            <option value="22">Romance</option>
+            <option value="28">Sci-Fi</option>
+        </select>
+    </div>
+    
+    <!-- Search Input -->
+    <div class="search">
+        <input type="text" id="searchInput" placeholder="Search for anime">
+        <button onclick="searchAnime()">Search</button>
+    </div>
+    
+    <div id="result" class="results"></div> 
+    <div id="youtube-results" class="results"></div>
+    <div id="anilist-results" class="results"></div>
+</body>
+</html>
